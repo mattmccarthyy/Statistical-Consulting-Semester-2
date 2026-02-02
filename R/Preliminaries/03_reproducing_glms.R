@@ -167,7 +167,7 @@ glm1 <- strip_glm(glm1)
 glm2 <- strip_glm(glm2)
 glm3 <- strip_glm(glm3)
 
-# Now saving lightweight versions
+# Now saving lightweight versions of original GLMs
 saveRDS(glm1, file = "R/GLMs/GLM1_full_model.rds")
 saveRDS(glm2, file = "R/GLMs/GLM2_no_area.rds")
 saveRDS(glm3, file = "R/GLMs/GLM3_reduced_model.rds")
