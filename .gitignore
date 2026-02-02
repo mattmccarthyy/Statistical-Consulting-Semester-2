@@ -5,6 +5,7 @@
 .RDataTmp
 
 .Rproj.user/
+.Rproj
 
 *.csv
 *.rds
