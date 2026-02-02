@@ -1,4 +1,11 @@
-.Rproj.user
 .Rhistory
+.Rapp.history
+
 .RData
-.Ruserdata
+.RDataTmp
+
+.Rproj.user/
+
+*.csv
+*.rds
+*.RData
