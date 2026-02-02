@@ -7,6 +7,5 @@
 .Rproj.user/
 .Rproj
 
-*.csv
 *.rds
 *.RData
