@@ -1,5 +1,0 @@
-rm(list = ls())
-
-# must use somewhere somehow RNGversion("3.5.0")
-?CASdatasets
-install.packages("CASDatasets")
