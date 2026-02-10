@@ -179,3 +179,22 @@ num_params <- sum(tree3$frame$var == "<leaf>"); num_params
 
 
 
+
+################################################################################
+#  Saving to GitHub for later comparison
+################################################################################
+# Again stripping of unimportant parts to keep models lean and easy to save and load
+strip_rpart <- function(tr) {
+  tr$x <- NULL
+  tr$y <- NULL
+  tr$model <- NULL
+  return(tr)
+}
+
+saveRDS(strip_rpart(tree1), "RT1_stripped.rds")
+saveRDS(strip_rpart(tree2_full), "RT2_full_stripped.rds") # Saving incase we want to look at exact pruning path. 
+saveRDS(strip_rpart(tree2), "RT2_stripped.rds")
+saveRDS(strip_rpart(tree3), "RT3_stripped.rds")
+
+
+
