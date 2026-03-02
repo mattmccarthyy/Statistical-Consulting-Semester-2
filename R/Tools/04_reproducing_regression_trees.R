@@ -178,6 +178,17 @@ c(loss_learn, loss_test)
 num_params <- sum(tree3$frame$var == "<leaf>"); num_params
 
 
+################################################################################
+#  RT1000 for PBM Comparison
+################################################################################
+tree1000_full <- rpart(
+  cbind(Exposure, ClaimNb) ~ Area + VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Density + Region,
+  data = learn, method = "poisson",
+  control = rpart.control(xval = 10, minbucket = 1000, cp = 1e-5)
+)
+
+cp_minCV_1000 <- tree1000_full$cptable[which.min(tree1000_full$cptable[, "xerror"]), "CP"]
+tree1000 <- prune(tree1000_full, cp = cp_minCV_1000)
 
 
 ################################################################################
@@ -191,10 +202,11 @@ strip_rpart <- function(tr) {
   return(tr)
 }
 
-saveRDS(strip_rpart(tree1), "RT1_stripped.rds")
-saveRDS(strip_rpart(tree2_full), "RT2_full_stripped.rds") # Saving incase we want to look at exact pruning path. 
-saveRDS(strip_rpart(tree2), "RT2_stripped.rds")
-saveRDS(strip_rpart(tree3), "RT3_stripped.rds")
+saveRDS(strip_rpart(tree1), "R/RegressionTrees/RT1_stripped.rds")
+saveRDS(strip_rpart(tree2_full), "R/RegressionTrees/RT2_full_stripped.rds") # Saving incase we want to look at exact pruning path. 
+saveRDS(strip_rpart(tree2), "R/RegressionTrees/RT2_stripped.rds")
+saveRDS(strip_rpart(tree3), "R/RegressionTrees/RT3_stripped.rds")
+saveRDS(strip_rpart(tree1000), "R/RegressionTrees/RT1000_stripped.rds")
 
 
 
