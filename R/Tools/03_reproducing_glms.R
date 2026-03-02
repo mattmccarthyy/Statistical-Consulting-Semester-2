@@ -56,6 +56,13 @@ train$VehGas <- as.factor(train$VehGas)
 test$VehGas <- as.factor(test$VehGas)
 
 
+# Write to GitHub for later use
+learn.glm <- train
+test.glm <- test
+
+write.csv(learn.glm, file = "data/learn.glm.csv", row.names = FALSE)
+write.csv(test.glm, file = "data/test.glm.csv", row.names = FALSE)
+
 ################################################################################
 # Verifying Same Dimensionality as Paper
 ################################################################################
