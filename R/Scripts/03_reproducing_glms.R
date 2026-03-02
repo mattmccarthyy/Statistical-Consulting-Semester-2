@@ -1,4 +1,5 @@
 rm(list = ls())
+options(timeout = 600) # Accounting for awful wifi
 
 ################################################################################
 # Load in all data
@@ -60,13 +61,14 @@ test$VehGas <- as.factor(test$VehGas)
 learn.glm <- train
 test.glm <- test
 
-write.csv(learn.glm, file = "data/learn.glm.csv", row.names = FALSE)
-write.csv(test.glm, file = "data/test.glm.csv", row.names = FALSE)
+saveRDS(learn.glm, file = "data/learn.glm.RDS")
+saveRDS(test.glm, file = "data/test.glm.RDS")
 
 ################################################################################
 # Verifying Same Dimensionality as Paper
 ################################################################################
 # Defining Model GLM1 formula (excluded the intercept and offset)
+# Ended up not using much for sake of explicit definitions of GLM, keeping as useful for dimensionality check
 glm_formula <- ~ AreaGLM + VehPowerGLM + VehAgeGLM + DrivAgeGLM + BonusMalusGLM + VehBrand + VehGas + DensityGLM + Region
 
 # Create design matrix for the train set

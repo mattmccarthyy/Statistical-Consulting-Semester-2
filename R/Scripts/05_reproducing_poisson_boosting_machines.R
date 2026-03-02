@@ -1,4 +1,5 @@
 rm(list = ls())
+options(timeout = 600) # Wifi can't load in data within 60s default window.
 
 ################################################################################
 # Load Required Package 
@@ -13,8 +14,22 @@ library(rpart)
 learn <- read.csv("https://raw.githubusercontent.com/mattmccarthyy/Statistical-Consulting-Semester-2/refs/heads/main/data/train_set.csv")
 test <- read.csv("https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/data/test_set.csv")
 
-learn.GLM <- read.csv("https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/data/learn.GLM.csv")
-test.GLM <- read.csv("https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/data/test.GLM.csv")
+# Loading as RDS in an attempt to bypass factor specification bugs. ADD COMMENT IF IT WORKS.
+u <- "https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/data/learn.glm.RDS"
+f <- tempfile(fileext = ".rds")
+download.file(u, f, mode = "wb")
+learn.GLM <- readRDS(f)
+
+u <- "https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/data/test.glm.RDS"
+f <- tempfile(fileext = ".rds")
+download.file(u, f, mode = "wb")
+test.GLM <- readRDS(f)
+
+train <- learn.GLM # Have to do this when using model.frame() testing GLM1. Same dataset, renamed to align with paper convention.
+
+# Remove temp objects
+rm(u, f)
+
 
 # They defined in Tools, I didn't look ahead as far so defining here
 n_l <- nrow(learn)
@@ -31,35 +46,39 @@ Poisson.Deviance <- function(pred, obs){
 # Poisson Boosting Machines
 ################################################################################
 ### Model BM1/2/3
+J0 <- 2 #depth of tree
+M0 <- 50 #iterations
 
-J0 <- 2      #depth of tree
-M0 <- 50      #iterations
+learn.GLM$fit <- predict(d.glm1, newdata = learn.GLM, type = "response")
+test.GLM$fit  <- predict(d.glm1, newdata = test.GLM,  type = "response")
 
-learn$fit0 <- learn$Exposure
-test$fit0  <- test$Exposure
+learn.GLM$fit0 <- learn.GLM$fit
+test.GLM$fit0  <- test.GLM$fit
 
 {t1 <- proc.time()
   for (m in 1:M0){
-    PBM.1 <- rpart(cbind(fit0,ClaimNb) ~ Area + VehPower + VehAge + DrivAge 
-                   + BonusMalus + VehBrand + VehGas + Density + Region, 
-                   data=learn, method="poisson",
-                   control=rpart.control(maxdepth=J0, maxsurrogate=0, xval=1, minbucket=10000, cp=0.00001))     
+    PBM.1 <- rpart(cbind(fit0,ClaimNb) ~ Area + VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Density + Region, 
+                   data = learn, method = "poisson",
+                   control = rpart.control(maxdepth = J0, maxsurrogate = 0, xval = 1, minbucket = 10000, cp = 0.00001))   
+    # maxsurrogate set max number of backup bariables the model calculates to handle missing data at each node
+    # 0 gives faster training, and no msising values here so safe to run
+    # Note: verified no NA's in initial data scripts. 
     learn$fit0 <- learn$fit0 * predict(PBM.1)
     learn[,paste("PBM_",m, sep="")] <-  learn$fit0
-    test$fit0 <- test$fit0 * predict(PBM.1, newdata=test)
-    test[,paste("PBM_",m, sep="")] <-  test$fit0
+    test$fit0 <- test$fit0 * predict(PBM.1, newdata = test)
+    test[,paste("PBM_", m, sep = "")] <-  test$fit0
   }
   (proc.time()-t1)[3]}
 
 
-losses <- array(NA, c(2,M0))
+losses <- array(NA, c(2, M0))
 
 for (m in 1:M0){
-  losses[1,m] <- 200*(sum(learn[,paste("PBM_",m, sep="")])-sum(learn$ClaimNb)+sum(log((learn$ClaimNb/learn[,paste("PBM_",m, sep="")])^(learn$ClaimNb))))/n_l
-  losses[2,m] <- 200*(sum(test[,paste("PBM_",m, sep="")])-sum(test$ClaimNb)+sum(log((test$ClaimNb/test[,paste("PBM_",m, sep="")])^(test$ClaimNb))))/n_t
+  losses[1,m] <- 200 * (sum(learn[ , paste("PBM_", m, sep = "")]) - sum(learn$ClaimNb) + sum(log((learn$ClaimNb / learn[,paste("PBM_", m, sep = "")])^(learn$ClaimNb)))) / n_l
+  losses[2,m] <- 200 * (sum(test[ ,paste("PBM_", m, sep = "")]) - sum(test$ClaimNb) + sum(log((test$ClaimNb / test[ , paste("PBM_", m, sep = "")])^(test$ClaimNb)))) / n_t
 }
 
-losses[,M0]       
+losses[ ,M0]       
 
 plot(x=c(0:M0), y=c(32.93518, losses[1,]), type='l', col="red", ylim=c(30,33.5), xlab="number of iterations", ylab="average in-sample loss (in 10^(-2))", main=paste("decrease of in-sample loss (depth=", J0,")", sep=""))
 points(x=c(0:M0), y=c(32.93518, losses[1,]), pch=19, col="red")
@@ -79,35 +98,27 @@ legend(x="topright", col=c("red", "green"), lty=c(1,2), lwd=c(1,1), pch=c(19,-1)
 # GLM Boost
 ################################################################################
 ### Model GLM1
-# Not loading in, as would have to get proc time from that script regardless. Fitting time is negligible, and this provides
-# an additional check that I am indeed reproducing these models correctly.
-# For that reason, re-fitting instead of loading directly from GitHub
- # d.GLM <- readRDS(url("...")), this wouldn't fully run, RDS reads differently, read above comment
-# {t1 <- proc.time()
-# d.glm1 <- glm(ClaimNb ~ VehPowerGLM + VehAgeGLM + DrivAgeGLM + BonusMalusGLM
-#               + VehBrand + VehGas + DensityGLM + Region + AreaGLM, 
-#               data=learn.GLM, offset=log(Exposure), family=poisson())
-# (proc.time()-t1)[3]}
+# Loading in from GitHub
 u <- "https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/R/GLMs/GLM1_full_model.rds"
 f <- tempfile(fileext = ".rds")
 download.file(u, f, mode = "wb")
 d.glm1 <- readRDS(f)
 
-learn.GLM$fit <- fitted(d.glm1)
-test.GLM$fit <- predict(d.glm1, newdata=test.GLM, type="response")
-c(Poisson.Deviance(learn.GLM$fit, learn.GLM$ClaimNb),Poisson.Deviance(test.GLM$fit, test.GLM$ClaimNb))
+# Remove temp objects
+rm(u, f)
 
-test.GLM$VehGas[test.GLM$VehGas == "Reg"]
-str(test.GLM$VehGas)
-str(learn.GLM$VehGas)
+learn.GLM$fit <- predict(d.glm1, newdata = learn.GLM, type = "response")
+test.GLM$fit  <- predict(d.glm1, newdata = test.GLM,  type = "response")
+c(Poisson.Deviance(learn.GLM$fit, learn.GLM$ClaimNb), Poisson.Deviance(test.GLM$fit, test.GLM$ClaimNb))
+
 
 
 ### Model GLMBoost
-J0 <- 3       #depth of tree
-M0 <- 50      #iterations
+J0 <- 3 # tree depth
+M0 <- 50 # iterations
 
 learn.GLM$fit0 <- learn.GLM$fit
-test.GLM$fit0  <- test.GLM$fit
+test.GLM$fit0 <- test.GLM$fit
 
 {t1 <- proc.time()
   for (m in 1:M0){
@@ -124,11 +135,11 @@ test.GLM$fit0  <- test.GLM$fit
 losses <- array(NA, c(2,M0))
 
 for (m in 1:M0){
-  losses[1,m] <- 200*(sum(learn.GLM[,paste("PBM_",m, sep="")])-sum(learn.GLM$ClaimNb)+sum(log((learn.GLM$ClaimNb/learn.GLM[,paste("PBM_",m, sep="")])^(learn.GLM$ClaimNb))))/n_l
-  losses[2,m] <- 200*(sum(test.GLM[,paste("PBM_",m, sep="")])-sum(test.GLM$ClaimNb)+sum(log((test.GLM$ClaimNb/test.GLM[,paste("PBM_",m, sep="")])^(test.GLM$ClaimNb))))/n_t
+  losses[1,m] <- 200 * (sum(learn.GLM[ , paste("PBM_",m , sep = "")])-sum(learn.GLM$ClaimNb)+sum(log((learn.GLM$ClaimNb/learn.GLM[,paste("PBM_",m, sep="")])^(learn.GLM$ClaimNb))))/n_l
+  losses[2,m] <- 200 * (sum(test.GLM[ , paste("PBM_", m, sep = "")])-sum(test.GLM$ClaimNb)+sum(log((test.GLM$ClaimNb/test.GLM[,paste("PBM_",m, sep="")])^(test.GLM$ClaimNb))))/n_t
 }
 
-losses[,M0]       
+losses[ ,M0]       
 
 plot(x=c(0:M0), y=c(31.26738, losses[1,]), type='l', col="magenta", ylim=c(30,32), xlab="number of iterations", ylab="average in-sample loss (in 10^(-2))", main=paste("GLM Boost: decrease of in-sample loss (depth=", J0,")", sep=""))
 points(x=c(0:M0), y=c(31.26738, losses[1,]), pch=19, col="magenta")
@@ -178,14 +189,14 @@ test$fit0  <- test$Exposure
   }
 } 
 
-losses <- array(NA, c(2,M0))
+losses <- array(NA, c(2, M0))
 
 for (m in 1:M0){
-  losses[1,m] <- 200*(sum(learn[,paste("PBM_",m, sep="")])-sum(learn$ClaimNb)+sum(log((learn$ClaimNb/learn[,paste("PBM_",m, sep="")])^(learn$ClaimNb))))/n_l
-  losses[2,m] <- 200*(sum(test[,paste("PBM_",m, sep="")])-sum(test$ClaimNb)+sum(log((test$ClaimNb/test[,paste("PBM_",m, sep="")])^(test$ClaimNb))))/n_t
+  losses[1,m] <- 200 * (sum(learn[ , paste("PBM_", m, sep = "")]) - sum(learn$ClaimNb) + sum(log((learn$ClaimNb / learn[ , paste("PBM_", m, sep = "")])^(learn$ClaimNb)))) / n_l
+  losses[2,m] <- 200 * (sum(test[ , paste("PBM_", m, sep = "")]) - sum(test$ClaimNb) + sum(log((test$ClaimNb / test[ , paste("PBM_", m, sep = "")])^(test$ClaimNb)))) / n_t
 }
 
-losses[,M0]  
+losses[ , M0]  
 
 
 
@@ -195,7 +206,6 @@ losses[,M0]
 ################################################################################
 #### Loading in required models for calculations 
 # (Above isn't necessary, I just like to generate tables in one go to keep everything understandable to an outsider)
-
 # For RT2
 u <- "https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/R/RegressionTrees/RT2_stripped.rds"
 f <- tempfile(fileext = ".rds")
@@ -207,6 +217,9 @@ u <- "https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/ref
 f <- tempfile(fileext = ".rds")
 download.file(u, f, mode = "wb")
 RT1000 <- readRDS(f)
+
+# Remove temp objects
+rm(u, f)
 
 
 ################################################################################
@@ -281,27 +294,31 @@ print(Table8, row.names=FALSE)
 ################################################################################
 # Table 9: Shrinkage (baseline is PBM3 = nu=1)
 ################################################################################
-sh075 <- run_shrink(nu=0.75, learn=learn, test=test)
-sh050 <- run_shrink(nu=0.50, learn=learn, test=test)
+sh075 <- run_shrink(nu = 0.75, learn = learn, test = test)
+sh050 <- run_shrink(nu = 0.50, learn = learn, test = test)
 
 Table9 <- data.frame(
-  Model=c("PBM3 (nu=1)","Shrinkage (nu=0.75)","Shrinkage (nu=0.50)"),
-  InSample_1e2 = round(c(pbm3["in_loss"],  sh075["in_loss"],  sh050["in_loss"]), 5),
+  Model=c("PBM3 (nu = 1)","Shrinkage (nu = 0.75)","Shrinkage (nu = 0.50)"),
+  InSample_1e2 = round(c(pbm3["in_loss"], sh075["in_loss"],  sh050["in_loss"]), 5),
   OutSample_1e2= round(c(pbm3["out_loss"], sh075["out_loss"], sh050["out_loss"]), 5)
 )
-print(Table9, row.names=FALSE)
+print(Table9, row.names = FALSE)
 
 ################################################################################
 # Table 10: GLMBoost + PBM3 + RT2 + RT1000 + GLM1
 ################################################################################
-glmboost <- run_pbm(J=3, M=50, learn=learn.GLM, test=test.GLM,
-                    start_learn=learn.GLM$fit, start_test=test.GLM$fit)
+glmboost <- run_pbm(J = 3, M = 50, learn = learn.GLM, test = test.GLM,
+                    start_learn = learn.GLM$fit, start_test = test.GLM$fit)
 
 Table10 <- data.frame(
-  Model=c("GLMBoost","PBM3","RT2","RT 1000","GLM1"),
+  Model = c("GLMBoost", "PBM3", "RT2", "RT 1000", "GLM1"),
   InSample_1e2 = round(c(glmboost["in_loss"], pbm3["in_loss"], rt2_in, rt1000_in, glm1_in), 5),
-  OutSample_1e2= round(c(glmboost["out_loss"], pbm3["out_loss"], rt2_out, rt1000_out, glm1_out), 5)
+  OutSample_1e2 = round(c(glmboost["out_loss"], pbm3["out_loss"], rt2_out, rt1000_out, glm1_out), 5)
 )
 print(Table10, row.names=FALSE)
+
+
+
+
 
 
