@@ -1,0 +1,2 @@
+"Model","Description","Params","AIC","Train_Dev","Test_Dev","Improvement_vs_Paper"
+"Enhanced GLM v1","Main effects + VehBrand x Region interaction",81,252793.336165381,31.2129060806466,32.1413698063684,0.0298601936315634
