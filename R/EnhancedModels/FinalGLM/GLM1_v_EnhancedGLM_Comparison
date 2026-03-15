@@ -1,0 +1,3 @@
+"","Model","Parameters","AIC","Train_Dev","Test_Dev"
+"1","Model GLM1",49,253062,31.26738,32.17123
+"2","Final improved GLM",88,251472.797170752,30.9945329587432,31.9783246312206
