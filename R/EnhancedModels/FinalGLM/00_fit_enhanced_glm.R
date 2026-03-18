@@ -131,6 +131,8 @@ print(final_results)
 # Saving all to push to GitHub
 ################################################################################
 write.csv(final_results, file = "R/EnhancedModels/FinalGLM/GLM1_v_EnhancedGLM_Comparison")
+write.csv(train, file = )
+
 
 # Re-using strip GLM from re-producing GLM's script.
 {
@@ -157,8 +159,10 @@ write.csv(final_results, file = "R/EnhancedModels/FinalGLM/GLM1_v_EnhancedGLM_Co
     return(mod)
   }
 }
-
-
 # Applying to models
 final_glm.push <- strip_glm(final_glm)
 saveRDS(final_glm.push, file = "R/EnhancedModels/FinalGLM/EnhancedGLM")
+
+# Saving the datasets too incase I want them in the XGBoost
+saveRDS(train, file = "C:/Users/matth/Desktop/Statistical Consultancy/Semester 2/R/EnhancedModels/data/EnhancedGLMDataset/Train.rds")
+saveRDS(test, file = "C:/Users/matth/Desktop/Statistical Consultancy/Semester 2/R/EnhancedModels/data/EnhancedGLMDataset/Test.rds")
