@@ -415,7 +415,7 @@ region_sorted <- region_analysis[order(region_analysis$Frequency), ]
 
 barplot(region_sorted$Frequency, names.arg = region_sorted$Region,
         col = "#8d17f1", xlab = "", ylab = "Frequency",
-        main = "Frequency by Region", las = 2, ylim = c(0, 0.15))
+        las = 2, ylim = c(0, 0.15))
 
 mtext("Region", side = 1, line = 5.5, cex = 1.3)
 
@@ -433,8 +433,8 @@ plot(k_values, within_ss, type = "b", pch = 19, col = "#8d17f1",
 grid()
 dev.off()
 
-# Plot 3: Cluster Visualization (Frequency vs B12%)
-png("figs/Region_figs/03_cluster_visualization.png", width = 800, height = 600)
+# Plot 3: Cluster Visualisation (Frequency vs B12%)
+png("figs/Region_figs/03_cluster_visualisation.png", width = 800, height = 600)
 par(mar = c(5.5, 5.5, 3, 1), tcl = -0.25, cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.2, mgp = c(3.5, 0.7, 0))
 
 cluster_colors <- c("lightblue", "lightgreen", "#8d17f1", "orange")
@@ -447,9 +447,7 @@ text(region_features$B12_pct, region_features$Frequency, labels = region_feature
      pos = 3, cex = 0.7)
 grid()
 
-
-
-# DENSITY HAS AN EFFECT, THIS HAS TO BE UPDATED 
-
+# DENSITY HAS AN EFFECT, THIS HAS TO BE UPDATED.
+# THIS IS DEFINITELY AN ENORMOUS WASTE OF A WEEK. 
 
 

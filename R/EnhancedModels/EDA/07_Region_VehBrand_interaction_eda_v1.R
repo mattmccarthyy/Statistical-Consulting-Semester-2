@@ -115,3 +115,4 @@ print(paste("k=4 clusters:", round(m2_aic - m2int_aic, 2)))
 
 # Best model
 print(comparison_interaction[which.min(comparison_interaction$Val_Dev), ])
+

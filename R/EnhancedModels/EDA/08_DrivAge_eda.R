@@ -1,44 +1,33 @@
 ################################################################################
-# EDA (8): DrivAge
+# EDA: DrivAge
 ################################################################################
 rm(list = ls())
 options(timeout = 600)
 
-# Load required library
-library(splines)
-
-# Load required dataset for EDA
+################################################################################
+# Load data
+################################################################################
 learn <- read.csv("https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/data/train_set.csv")
-
-# Load data required for GLM Spec fitting and validation. 
 train <- read.csv("https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/R/EnhancedModels/data/train.csv")
 validate <- read.csv("https://github.com/mattmccarthyy/Statistical-Consulting-Semester-2/raw/refs/heads/main/R/EnhancedModels/data/validation.csv")
 
-# Comparison Metric
-Poisson.Deviance <- function(pred, obs){200*(sum(pred)-sum(obs)+sum(log((obs/pred)^(obs))))/length(pred)}
-
-
-
-################################################################################
-# 1). DrivAge Summary and Distribution
-################################################################################
- # DrivAge Summary
-print(summary(learn$DrivAge))
-
-#Unique DrivAge values
-length(unique(learn$DrivAge))))
-
-
-# Age distribution
-age_dist <- table(learn$DrivAge)
-
-# DrivAge distribution (first 20)
-print(head(age_dist, 20))
-
+# Helper
+Poisson.Deviance <- function(pred, obs){
+  200 * (sum(pred) - sum(obs) + sum(log((obs / pred)^(obs)))) / length(pred)
+}
 
 
 ################################################################################
-# 2). Frequency by DrivAge
+# 1). Basic distribution
+################################################################################
+summary(learn$DrivAge)
+range(learn$DrivAge)
+length(unique(learn$DrivAge))
+table(learn$DrivAge)
+# Older ages way too sparse.
+
+################################################################################
+# 2). Frequency by exact driver age
 ################################################################################
 drivage_analysis <- data.frame(
   DrivAge = sort(unique(learn$DrivAge)),
@@ -48,230 +37,306 @@ drivage_analysis <- data.frame(
 )
 
 drivage_analysis$Frequency <- drivage_analysis$Claims / drivage_analysis$Exposure
-drivage_analysis$Pct_Policies <- 100 * drivage_analysis$Policies / sum(drivage_analysis$Policies)
+drivage_analysis$SE <- sqrt(drivage_analysis$Frequency / drivage_analysis$Exposure)
+drivage_analysis$CI_lower <- pmax(0, drivage_analysis$Frequency - 1.96 * drivage_analysis$SE)
+drivage_analysis$CI_upper <- drivage_analysis$Frequency + 1.96 * drivage_analysis$SE
 
-# Frequency by DrivAge (first 30)
-print(head(drivage_analysis, 30))
+drivage_analysis
 
-# Frequency by DrivAge (ages 60+)
-print(drivage_analysis[drivage_analysis$DrivAge >= 60, ])
+# This is the main table.
+# It shows the raw shape of the age effect.
 
-# Plot frequency by age
-plot(drivage_analysis$DrivAge, drivage_analysis$Frequency, 
-     type = "p", pch = 19, col = "#8d17f1", cex = 0.8,
-     xlab = "Driver Age", ylab = "Frequency",
-     main = "Frequency by Driver Age")
-abline(h = sum(learn$ClaimNb) / sum(learn$Exposure), col = "red", lty = 2)
+
+################################################################################
+# 3). Restrict to ages with enough exposure
+################################################################################
+drivage_analysis[drivage_analysis$Exposure >= 500,
+                 c("DrivAge", "Exposure", "Claims", "Frequency", "CI_lower", "CI_upper")]
+
+# This removes the noisiest tail.
+# Use this to judge the broad pattern.
+
+
+################################################################################
+# 4). Plot frequency by driver age
+################################################################################
+drivage_analysis[drivage_analysis$CI_lower == drivage_analysis$CI_upper,
+                 c("DrivAge", "Exposure", "Claims", "Frequency", "CI_lower", "CI_upper")]
+# Few CI's that have identical upper and lower bounds, because no claims at those ages
+# So below gives a warning, but can ignore. 
+plot(drivage_analysis$DrivAge, drivage_analysis$Frequency,
+     type = "n",
+     xlab = "Driver Age", ylab = "Frequency")
+
 grid()
 
+arrows(drivage_analysis$DrivAge, drivage_analysis$CI_lower,
+       drivage_analysis$DrivAge, drivage_analysis$CI_upper,
+       angle = 90, code = 3, length = 0.08, lwd = 1.2)
+
+lines(drivage_analysis$DrivAge, drivage_analysis$Frequency, lwd = 1.8)
+points(drivage_analysis$DrivAge, drivage_analysis$Frequency,
+       pch = 19, cex = 1)
+
+h1 <- sum(learn$ClaimNb) / sum(learn$Exposure)
+abline(h = h1, col = "#8d17f1", lty = 2, lwd = 2)
+text(18 + 4.5, h1 - 0.019,labels = "Overall frequency", col = "#8d17f1", cex = 1.1)
+# The plot is mainly to see whether the effect looks stepped or smooth.
 
 
 ################################################################################
-# 3). Check for Young Driver Effect
+# 5). Paper groups
 ################################################################################
-young_drivers <- drivage_analysis[drivage_analysis$DrivAge <= 25, ]
-print("Young drivers (<= 25) analysis:")
-print(young_drivers)
-
-# Ages 18-21 average frequency
-round(mean(drivage_analysis$Frequency[drivage_analysis$DrivAge >= 18 & drivage_analysis$DrivAge <= 21]), 4)
-
-# Ages 22-25 average frequency
-round(mean(drivage_analysis$Frequency[drivage_analysis$DrivAge >= 22 & drivage_analysis$DrivAge <= 25]), 4)
-
-# Ages 26-60 average frequency
-round(mean(drivage_analysis$Frequency[drivage_analysis$DrivAge >= 26 & drivage_analysis$DrivAge <= 60]), 4)
-
-
-
-################################################################################
-# Part 2: GLM Specification 
-################################################################################
-##########################################################
-# Specification 1: Paper - 7 categorical classes
-##########################################################
-# Paper's breaks: [18,21), [21,26), [26,31), [31,41), [41,51), [51,71), [71, \infty)
-# Reference level [41,51) - stable middle age group
 age_breaks <- c(18, 21, 26, 31, 41, 51, 71, Inf)
-train$DrivAgeGLM <- cut(train$DrivAge, breaks = age_breaks, right = FALSE, labels = 1:7)
-train$DrivAgeGLM <- relevel(train$DrivAgeGLM, ref = "5")
-validate$DrivAgeGLM <- cut(validate$DrivAge, breaks = age_breaks, right = FALSE, labels = 1:7)
-validate$DrivAgeGLM <- relevel(validate$DrivAgeGLM, ref = "5")
 
-spec1 <- glm(ClaimNb ~ DrivAgeGLM, family = poisson(), data = train, offset = log(Exposure))
-spec1_aic <- AIC(spec1)
-spec1_train_dev <- Poisson.Deviance(fitted(spec1), train$ClaimNb)
-spec1_val_dev <- Poisson.Deviance(predict(spec1, newdata = validate, type = "response"), validate$ClaimNb)
-spec1_params <- length(coef(spec1))
-
-
-
-##########################################################
-# Specification 2: Splines with df = 2 to 9
-##########################################################
-# Data frame to store results
-spline_results <- data.frame(
-  DF = 2:9,
-  AIC = NA,
-  Train_Dev = NA,
-  Val_Dev = NA,
-  Params = NA
+# Using the papers bins to see if they line up with the actual patterns.
+drivage_paper_groups <- data.frame(
+  group = c("18_20", "21_25", "26_30", "31_40", "41_50", "51_70", "71plus"),
+  exposure = c(
+    sum(learn$Exposure[learn$DrivAge >= 18 & learn$DrivAge < 21]),
+    sum(learn$Exposure[learn$DrivAge >= 21 & learn$DrivAge < 26]),
+    sum(learn$Exposure[learn$DrivAge >= 26 & learn$DrivAge < 31]),
+    sum(learn$Exposure[learn$DrivAge >= 31 & learn$DrivAge < 41]),
+    sum(learn$Exposure[learn$DrivAge >= 41 & learn$DrivAge < 51]),
+    sum(learn$Exposure[learn$DrivAge >= 51 & learn$DrivAge < 71]),
+    sum(learn$Exposure[learn$DrivAge >= 71])
+  ),
+  claims = c(
+    sum(learn$ClaimNb[learn$DrivAge >= 18 & learn$DrivAge < 21]),
+    sum(learn$ClaimNb[learn$DrivAge >= 21 & learn$DrivAge < 26]),
+    sum(learn$ClaimNb[learn$DrivAge >= 26 & learn$DrivAge < 31]),
+    sum(learn$ClaimNb[learn$DrivAge >= 31 & learn$DrivAge < 41]),
+    sum(learn$ClaimNb[learn$DrivAge >= 41 & learn$DrivAge < 51]),
+    sum(learn$ClaimNb[learn$DrivAge >= 51 & learn$DrivAge < 71]),
+    sum(learn$ClaimNb[learn$DrivAge >= 71])
+  )
 )
 
-for(i in 1:nrow(spline_results)) {
-  df_val <- spline_results$DF[i]
-  
-  model <- glm(ClaimNb ~ ns(DrivAge, df = df_val), family = poisson(), 
-               data = train, offset = log(Exposure))
-  
-  spline_results$AIC[i] <- AIC(model)
-  spline_results$Train_Dev[i] <- Poisson.Deviance(fitted(model), train$ClaimNb)
-  spline_results$Val_Dev[i] <- Poisson.Deviance(predict(model, newdata = validate, type = "response"), 
-                                                validate$ClaimNb)
-  spline_results$Params[i] <- length(coef(model))
-}
+drivage_paper_groups$frequency <- drivage_paper_groups$claims / drivage_paper_groups$exposure
+drivage_paper_groups
+# Strong young-driver effect.
+# Frequency falls quickly up to about age 30.
 
-print("Spline AIC by degrees of freedom:")
-print(spline_results)
+# After about 30, the pattern is much flatter.
+# There are no clear hard cutpoints.
 
-# Plot AIC vs DF
-par(mar = c(5.5, 5.5, 3, 1), tcl = -0.25, cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.2, mgp = c(3.5, 0.7, 0))
-plot(spline_results$DF, spline_results$AIC, type = "b", pch = 19, col = "#8d17f1",
-     xlab = "Spline Degrees of Freedom", ylab = "AIC",
-     main = "DrivAge Spline AIC vs Degrees of Freedom", lwd = 2, cex = 1.2)
-abline(h = spec1_aic, col = "red", lty = 2, lwd = 2)
-text(7, spec1_aic + 5, "Paper (7 classes)", col = "red", cex = 1.1)
-grid()
+# So grouped-factor alternatives are not strongly supported here.
+# The main question is whether a smooth spline improves on the paper's bins.
+
+# The only DrivAge specifications worth testing next are:
+# (i) the paper's 7 classes
+# (ii) a spline with df = 4
+# (iii) a spline with df = 5
 
 
 
-##########################################################
-# Find best spline (elbow at DF=4)
-##########################################################
-best_spline <- spline_results[spline_results$DF == 4, ]
+################################################################################
+# PART 2: Compare DrivAge specifications inside the full GLM
+################################################################################
+library(splines)
+################################################################################
+# Recreate the GLM data setup
+################################################################################
+area_levels <- levels(as.factor(learn$Area))
+vehpower_levels <- as.character(sort(unique(pmin(learn$VehPower, 9))))
+region_levels <- levels(as.factor(learn$Region))
+brand_levels <- levels(as.factor(learn$VehBrand))
+gas_levels <- levels(as.factor(learn$VehGas))
 
-print("Best spline specification (elbow at DF=4):")
-print(best_spline)
+# 1). Area
+train$AreaGLM <- factor(match(train$Area, area_levels), levels = 1:length(area_levels))
+validate$AreaGLM <- factor(match(validate$Area, area_levels), levels = 1:length(area_levels))
 
+# 2). VehPower
+train$VehPowerGLM <- factor(pmin(train$VehPower, 9), levels = vehpower_levels)
+validate$VehPowerGLM <- factor(pmin(validate$VehPower, 9), levels = vehpower_levels)
 
+# 3). VehAge
+train$VehAgeCap <- pmin(train$VehAge, 20)
+validate$VehAgeCap <- pmin(validate$VehAge, 20)
 
-##########################################################
-# Comparison Table: Paper vs Best Spline
-##########################################################
+train$VehAge_3grp <- cut(train$VehAgeCap,
+                         breaks = c(-0.5, 0.5, 12.5, 1000),
+                         labels = c("0", "1_12", "13plus"),
+                         right = FALSE)
+train$VehAge_3grp <- relevel(train$VehAge_3grp, ref = "1_12")
+
+validate$VehAge_3grp <- cut(validate$VehAgeCap,
+                            breaks = c(-0.5, 0.5, 12.5, 1000),
+                            labels = c("0", "1_12", "13plus"),
+                            right = FALSE)
+validate$VehAge_3grp <- relevel(validate$VehAge_3grp, ref = "1_12")
+
+# 4). BonusMalus
+train$BonusMalusCap <- pmin(train$BonusMalus, 150)
+validate$BonusMalusCap <- pmin(validate$BonusMalus, 150)
+
+train$BM_is50 <- ifelse(train$BonusMalusCap == 50, 1, 0)
+validate$BM_is50 <- ifelse(validate$BonusMalusCap == 50, 1, 0)
+
+train$BM_above50 <- pmax(train$BonusMalusCap - 50, 0)
+validate$BM_above50 <- pmax(validate$BonusMalusCap - 50, 0)
+
+train$BM_above100 <- pmax(train$BonusMalusCap - 100, 0)
+validate$BM_above100 <- pmax(validate$BonusMalusCap - 100, 0)
+
+# 5). Density
+train$DensityGLM <- log(train$Density)
+validate$DensityGLM <- log(validate$Density)
+
+# 6). Region
+train$Region <- factor(train$Region, levels = region_levels)
+train$Region <- relevel(train$Region, ref = "R24")
+validate$Region <- factor(validate$Region, levels = region_levels)
+validate$Region <- relevel(validate$Region, ref = "R24")
+
+# 7). VehBrand
+train$VehBrand <- factor(train$VehBrand, levels = brand_levels)
+train$VehBrand <- relevel(train$VehBrand, ref = "B1")
+validate$VehBrand <- factor(validate$VehBrand, levels = brand_levels)
+validate$VehBrand <- relevel(validate$VehBrand, ref = "B1")
+
+# 8). VehGas
+train$VehGas <- factor(train$VehGas, levels = gas_levels)
+validate$VehGas <- factor(validate$VehGas, levels = gas_levels)
+
+# 9). Offset
+train$logExposure <- log(train$Exposure)
+validate$logExposure <- log(validate$Exposure)
+
+################################################################################
+# Define the three DrivAge specifications to compare
+################################################################################
+# Paper bins
+age_breaks <- c(18, 21, 26, 31, 41, 51, 71, 150)
+train$DrivAge_paper <- cut(train$DrivAge, breaks = age_breaks, right = FALSE, labels = 1:7)
+train$DrivAge_paper <- relevel(train$DrivAge_paper, ref = "5")
+
+validate$DrivAge_paper <- cut(validate$DrivAge, breaks = age_breaks, right = FALSE, labels = 1:7)
+validate$DrivAge_paper <- relevel(validate$DrivAge_paper, ref = "5")
+
+################################################################################
+# Fit the three full GLMs
+################################################################################
+glm_da_paper <- glm(
+  ClaimNb ~ AreaGLM + VehPowerGLM + VehAge_3grp +
+    DrivAge_paper + BM_is50 + BM_above50 + BM_above100 +
+    VehBrand + VehGas + DensityGLM + Region,
+  family = poisson(link = log),
+  data = train,
+  offset = logExposure
+)
+
+glm_da_ns4 <- glm(
+  ClaimNb ~ AreaGLM + VehPowerGLM + VehAge_3grp +
+    ns(DrivAge, df = 4) + BM_is50 + BM_above50 + BM_above100 +
+    VehBrand + VehGas + DensityGLM + Region,
+  family = poisson(link = log),
+  data = train,
+  offset = logExposure
+)
+
+glm_da_ns5 <- glm(
+  ClaimNb ~ AreaGLM + VehPowerGLM + VehAge_3grp +
+    ns(DrivAge, df = 5) + BM_is50 + BM_above50 + BM_above100 +
+    VehBrand + VehGas + DensityGLM + Region,
+  family = poisson(link = log),
+  data = train,
+  offset = logExposure
+)
+
+################################################################################
+# Compare using Poisson deviance
+################################################################################
+paper_train_pred <- predict(glm_da_paper, newdata = train, type = "response")
+paper_val_pred <- predict(glm_da_paper, newdata = validate, type = "response")
+
+ns4_train_pred <- predict(glm_da_ns4, newdata = train, type = "response")
+ns4_val_pred <- predict(glm_da_ns4, newdata = validate, type = "response")
+
+ns5_train_pred <- predict(glm_da_ns5, newdata = train, type = "response")
+ns5_val_pred <- predict(glm_da_ns5, newdata = validate, type = "response")
+
 comparison <- data.frame(
-  Specification = c("Paper: 7 categorical classes", 
-                    paste0("Spline (DF=", best_spline$DF, ")")),
-  Params = c(spec1_params, best_spline$Params),
-  AIC = c(spec1_aic, best_spline$AIC),
-  Train_Dev = c(spec1_train_dev, best_spline$Train_Dev),
-  Val_Dev = c(spec1_val_dev, best_spline$Val_Dev)
+  Specification = c(
+    "Paper 7 classes",
+    "Spline df = 4",
+    "Spline df = 5"
+  ),
+  Parameters = c(length(coef(glm_da_paper)),
+                 length(coef(glm_da_ns4)),
+                 length(coef(glm_da_ns5))),
+  AIC = c(AIC(glm_da_paper),
+          AIC(glm_da_ns4),
+          AIC(glm_da_ns5)),
+  Train_Dev = c(Poisson.Deviance(paper_train_pred, train$ClaimNb),
+                Poisson.Deviance(ns4_train_pred, train$ClaimNb),
+                Poisson.Deviance(ns5_train_pred, train$ClaimNb)),
+  Val_Dev = c(Poisson.Deviance(paper_val_pred, validate$ClaimNb),
+              Poisson.Deviance(ns4_val_pred, validate$ClaimNb),
+              Poisson.Deviance(ns5_val_pred, validate$ClaimNb))
 )
 
-comparison$Delta_AIC <- comparison$AIC - spec1_aic
+comparison$Delta_AIC_vs_Paper <- comparison$AIC - comparison$AIC[1]
+comparison$Delta_Train_Dev_vs_Paper <- comparison$Train_Dev - comparison$Train_Dev[1]
+comparison$Delta_Val_Dev_vs_Paper <- comparison$Val_Dev - comparison$Val_Dev[1]
 
-# Paper vs Best Spline
 print(comparison)
-print(comparison[which.min(comparison$Val_Dev), ])
 
-# Results: Spline DF=4 dominates paper's 7 categorical classes
-# AIC improvement: -95.5, Validation improvement: -0.021 deviance 
-# Spline uses fewer parameters (5 vs 7) yet performs better
+# Validation deviance is again main decision rule.
+# Both spline specifications improve on the paper's 7-class DrivAge term.
 
-# EDA showed smooth continuous decline: Age 18 (32.6%) to Age 30 (9.3%), not discrete jumps
-# Paper's rigid breaks [18,21), [21,26), [26,31) force artificial categorical steps
-# Spline captures natural aging curve: young driver premium gradually declines
+# The best specification is spline df = 5.
+# It gives the lowest AIC, training deviance, and validation deviance.
 
-# Elbow point in AIC plot at df = 4 - last major improvement before plateau
-# DF=4 to DF=5 actually increases AIC (+1.8), then need DF=7-8 for more gains
-# DF=4 sufficient to capture: (1) steep young driver decline, (2) middle-age stability, (3) minor variation
-# Validation only 0.005 worse than DF=8 but saves 3 parameters
+# The gain over df = 4 is small, but df = 5 still uses fewer parameters than
+# the paper model, so keeping df = 5 for now.
 
-# DECISION: Going to use Spline DF=4 for DrivAge
-# Clear improvement over paper, theoretically sound (aging is continuous), parsimonious
-# No bootstrap needed - improvement decisive and makes sense
+### Another nice plot for the report. 
+# Prediction grid from the fitted df = 5 spline model
+# Fitting a univariate spline only for visualisation
+drivage_spline5_uni <- glm(
+  ClaimNb ~ ns(DrivAge, df = 5),
+  family = poisson(link = log),
+  data = learn,
+  offset = log(Exposure)
+)
 
+# Smooth prediction grid
+age_grid <- data.frame(
+  DrivAge = seq(min(drivage_analysis$DrivAge),
+                max(drivage_analysis$DrivAge),
+                by = 0.1),
+  Exposure = 1
+)
 
+age_grid$fit <- predict(drivage_spline5_uni, newdata = age_grid, type = "response")
 
-################################################################################
-# Plot: Actual Frequency vs Spline Fit (DF=4)
-################################################################################
-# Fit spline DF=4 model
-spline_model <- glm(ClaimNb ~ ns(DrivAge, df = 4), family = poisson(), 
-                    data = train, offset = log(Exposure))
+plot(drivage_analysis$DrivAge, drivage_analysis$Frequency,
+     type = "n",
+     xlab = "Driver Age", ylab = "Frequency")
 
-# Create prediction data across age range
-pred_ages <- data.frame(DrivAge = 18:100, Exposure = 1)
-pred_freq <- predict(spline_model, newdata = pred_ages, type = "response")
+grid()
 
-# Plot
-par(mar = c(5.5, 5.5, 3, 1), tcl = -0.25, cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.2, mgp = c(3.5, 0.7, 0))
+arrows(drivage_analysis$DrivAge, drivage_analysis$CI_lower,
+       drivage_analysis$DrivAge, drivage_analysis$CI_upper,
+       angle = 90, code = 3, length = 0.08, lwd = 1.2)
 
-plot(drivage_analysis$DrivAge, drivage_analysis$Frequency, 
-     pch = 19, col = "darkgrey", cex = 0.8,
-     xlab = "Driver Age", ylab = "Frequency",
-     main = "Frequency vs Driver Age: Actual vs Spline DF=4",
-     ylim = c(0, 0.35))
+lines(drivage_analysis$DrivAge, drivage_analysis$Frequency, lwd = 1.8)
+points(drivage_analysis$DrivAge, drivage_analysis$Frequency,
+       pch = 19, cex = 1)
 
-lines(pred_ages$DrivAge, pred_freq, col = "#8d17f1", lwd = 3)
+lines(age_grid$DrivAge, age_grid$fit, col = "red", lwd = 2.2)
 
-abline(h = sum(learn$ClaimNb) / sum(learn$Exposure), col = "red", lty = 2, lwd = 2)
+h1 <- sum(learn$ClaimNb) / sum(learn$Exposure)
+abline(h = h1, col = "#8d17f1", lty = 2, lwd = 2)
 
-legend("topright", 
-       legend = c("Actual Frequency", "Spline DF=4 Fit", "Overall Average"),
-       col = c("darkgrey", "#8d17f1", "red"),
+legend("topright",
+       legend = c("Observed frequency", "Spline (df = 5)", "Overall frequency"),
+       col = c("black", "red", "#8d17f1"),
+       lty = c(1, 1, 2),
+       lwd = c(1.8, 2.2, 2),
        pch = c(19, NA, NA),
-       lty = c(NA, 1, 2),
-       lwd = c(NA, 3, 2),
-       cex = 1.1)
+       bty = "box",
+       cex = 1.0)
 
-grid()
-
-
-
-################################################################################
-# Part 3: Save Essential Plots for Report
-################################################################################
-# Plot 1: Frequency by Driver Age (raw data)
-png("figs/DrivAge_figs/01_frequency_by_age.png", width = 800, height = 600)
-par(mar = c(5.5, 5.5, 3, 1), tcl = -0.25, cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.2, mgp = c(3.5, 0.7, 0))
-
-plot(drivage_analysis$DrivAge, drivage_analysis$Frequency, 
-     type = "p", pch = 19, col = "#8d17f1", cex = 0.8,
-     xlab = "Driver Age", ylab = "Frequency",
-     main = "Frequency by Driver Age")
-abline(h = sum(learn$ClaimNb) / sum(learn$Exposure), col = "red", lty = 2, lwd = 2)
-grid()
-dev.off()
-
-# Plot 2: Spline AIC vs Degrees of Freedom
-png("figs/DrivAge_figs/02_spline_AIC_comparison.png", width = 800, height = 600)
-par(mar = c(5.5, 5.5, 3, 1), tcl = -0.25, cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.2, mgp = c(3.5, 0.7, 0))
-
-plot(spline_results$DF, spline_results$AIC, type = "b", pch = 19, col = "#8d17f1",
-     xlab = "Spline Degrees of Freedom", ylab = "AIC",
-     main = "DrivAge Spline AIC vs Degrees of Freedom", lwd = 2, cex = 1.2)
-abline(h = spec1_aic, col = "red", lty = 2, lwd = 2)
-text(7, spec1_aic + 5, "Paper (7 classes)", col = "red", cex = 1.1)
-grid()
-dev.off()
-
-# Plot 3: Actual Frequency vs Spline Fit
-png("figs/DrivAge_figs/03_actual_vs_spline_fit.png", width = 800, height = 600)
-par(mar = c(5.5, 5.5, 3, 1), tcl = -0.25, cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.2, mgp = c(3.5, 0.7, 0))
-
-plot(drivage_analysis$DrivAge, drivage_analysis$Frequency, 
-     pch = 19, col = "darkgrey", cex = 0.8,
-     xlab = "Driver Age", ylab = "Frequency",
-     main = "Frequency vs Driver Age: Actual vs Spline DF=4",
-     ylim = c(0, 0.35))
-lines(pred_ages$DrivAge, pred_freq, col = "#8d17f1", lwd = 3)
-abline(h = sum(learn$ClaimNb) / sum(learn$Exposure), col = "red", lty = 2, lwd = 2)
-legend("topright", 
-       legend = c("Actual Frequency", "Spline DF=4 Fit", "Overall Average"),
-       col = c("darkgrey", "#8d17f1", "red"),
-       pch = c(19, NA, NA),
-       lty = c(NA, 1, 2),
-       lwd = c(NA, 3, 2),
-       cex = 1.1)
-grid()
-dev.off()
