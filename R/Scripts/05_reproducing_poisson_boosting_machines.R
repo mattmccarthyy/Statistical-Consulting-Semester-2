@@ -168,3 +168,4 @@ Table10 <- data.frame(
   OutSample_1e2 = round(c(glmboost["out_loss"], pbm3["out_loss"], rt2_out, rt1000_out, glm1_out), 5)
 )
 print(Table10, row.names = FALSE)
+
