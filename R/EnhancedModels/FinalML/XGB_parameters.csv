@@ -1,0 +1,2 @@
+,objective,eval_metric,booster,tree_method,grow_policy,eta,max_depth,min_child_weight,subsample,colsample_bytree,gamma,lambda,alpha,max_delta_step,verbosity,nthread,seed
+1,count:poisson,poisson-nloglik,gbtree,hist,depthwise,0.1,5,150,1,0.8,0,5,0,1,1,11,67
