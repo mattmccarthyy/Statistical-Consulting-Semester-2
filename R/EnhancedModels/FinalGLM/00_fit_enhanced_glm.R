@@ -1,27 +1,29 @@
 ################################################################################
-# Fit and test final improved GLM only
+# Fitting and testing final improved GLM 
 ################################################################################
-
 rm(list = ls())
 options(timeout = 600)
 
+# Age being modelled as a spline on 5 df. 
 library(splines)
 
+# Comparison metrics
 Poisson.Deviance <- function(pred, obs) {
   200 * (sum(pred) - sum(obs) + sum(log((obs / pred)^(obs)))) / length(pred)
 }
 
-################################################################################
-# Load exact paper train/test data
-################################################################################
 
+################################################################################
+# Load train/test data
+################################################################################
 train <- read.csv("https://raw.githubusercontent.com/mattmccarthyy/Statistical-Consulting-Semester-2/refs/heads/main/data/train_set.csv")
 test  <- read.csv("https://raw.githubusercontent.com/mattmccarthyy/Statistical-Consulting-Semester-2/refs/heads/main/data/test_set.csv")
 
-################################################################################
-# Main effects identical to paper where unchanged
-################################################################################
 
+
+################################################################################
+# Pre-processing (all changes outlined in EDA)
+################################################################################
 # 1). Area: categorical with same train-set level structure
 area_levels <- levels(as.factor(train$Area))
 train$AreaGLM <- factor(match(train$Area, area_levels), levels = 1:length(area_levels))
@@ -53,7 +55,7 @@ test$VehAge_3grp <- cut(
 test$VehAge_3grp <- relevel(test$VehAge_3grp, ref = "1_12")
 
 # 4). DrivAge: updated spline df = 5
-# Applied directly in formula
+# Including in the GLM call. 
 
 # 5). BonusMalus: updated mass point at 50 + hinge at 100
 train$BonusMalusCap <- pmin(train$BonusMalus, 150)
@@ -97,10 +99,11 @@ gas_levels <- levels(as.factor(train$VehGas))
 train$VehGas <- factor(train$VehGas, levels = gas_levels)
 test$VehGas  <- factor(test$VehGas, levels = gas_levels)
 
+
+
 ################################################################################
 # Fit final improved GLM
 ################################################################################
-
 final_glm <- glm(
   ClaimNb ~ AreaGLM + VehPowerGLM + VehAge_3grp + ns(DrivAge, df = 5) +
     BM_is50 + BM_above50 + BM_above100 + VehBrand + VehGas +
@@ -110,6 +113,7 @@ final_glm <- glm(
   data = train,
   offset = logExposure
 )
+
 
 ################################################################################
 # Evaluate final improved GLM
@@ -127,12 +131,12 @@ final_results <- data.frame(
 
 print(final_results)
 
+
+
 ################################################################################
 # Saving all to push to GitHub
 ################################################################################
 write.csv(final_results, file = "R/EnhancedModels/FinalGLM/GLM1_v_EnhancedGLM_Comparison")
-write.csv(train, file = )
-
 
 # Re-using strip GLM from re-producing GLM's script.
 {

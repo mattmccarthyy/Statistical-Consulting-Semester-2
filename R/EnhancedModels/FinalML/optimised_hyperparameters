@@ -1,0 +1,2 @@
+"","learning_rate","max_depth","min_child_weight","gamma","best_nrounds","cv_poisson_nloglik"
+"11",0.03,5,25,0.5,863,0.20225474058707
