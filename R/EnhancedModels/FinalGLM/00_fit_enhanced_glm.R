@@ -105,7 +105,7 @@ test$VehGas  <- factor(test$VehGas, levels = gas_levels)
 # Fit final improved GLM
 ################################################################################
 final_glm <- glm(
-  ClaimNb ~ AreaGLM + VehPowerGLM + VehAge_3grp + ns(DrivAge, df = 5) +
+  ClaimNb ~ AreaGLM + VehPowerGLM + VehAge_3grp + ns(DrivAge, df = 4) +
     BM_is50 + BM_above50 + BM_above100 + VehBrand + VehGas +
     DensityGLM + Region + VehAge_3grp:VehGas +
     VehAge_3grp:VehPowerGLM + B12_only:Region,
@@ -136,37 +136,41 @@ print(final_results)
 ################################################################################
 # Saving all to push to GitHub
 ################################################################################
-write.csv(final_results, file = "R/EnhancedModels/FinalGLM/GLM1_v_EnhancedGLM_Comparison")
+# write.csv(final_results, file = "R/EnhancedModels/FinalGLM/GLM1_v_EnhancedGLM_Comparison")
+# 
+# # Re-using strip GLM from re-producing GLM's script.
+# {
+#   strip_glm <- function(mod) {
+#     ### NOTE: This is taken from online, not original work.
+#     # 1). Removing model frame and orig. data 
+#     mod$data <- NULL
+#     mod$model <- NULL
+#     mod$y <- NULL
+#     
+#     # 2). Remove working vectors used for training diagnostics
+#     # (recalculated anyway when using predict() on new data)
+#     mod$residuals <- NULL
+#     mod$fitted.values <- NULL
+#     mod$effects <- NULL
+#     mod$linear.predictors <- NULL
+#     mod$weights <- NULL
+#     mod$prior.weights <- NULL
+#     
+#     # 3). Clean up the QR decomposition to save further space
+#     # Just removing memory of fitting process, don't need this matrix
+#     mod$qr$qr <- NULL 
+#     
+#     return(mod)
+#   }
+# }
+# # Applying to models
+# final_glm.push <- strip_glm(final_glm)
+# saveRDS(final_glm.push, file = "R/EnhancedModels/FinalGLM/EnhancedGLM.rds")
+# 
+# # Saving the datasets too incase I want them in the XGBoost
+# saveRDS(train, file = "C:/Users/matth/Desktop/Statistical Consultancy/Semester 2/R/EnhancedModels/data/EnhancedGLMDataset/Train.rds")
+# saveRDS(test, file = "C:/Users/matth/Desktop/Statistical Consultancy/Semester 2/R/EnhancedModels/data/EnhancedGLMDataset/Test.rds")
 
-# Re-using strip GLM from re-producing GLM's script.
-{
-  strip_glm <- function(mod) {
-    ### NOTE: This is taken from online, not original work.
-    # 1). Removing model frame and orig. data 
-    mod$data <- NULL
-    mod$model <- NULL
-    mod$y <- NULL
-    
-    # 2). Remove working vectors used for training diagnostics
-    # (recalculated anyway when using predict() on new data)
-    mod$residuals <- NULL
-    mod$fitted.values <- NULL
-    mod$effects <- NULL
-    mod$linear.predictors <- NULL
-    mod$weights <- NULL
-    mod$prior.weights <- NULL
-    
-    # 3). Clean up the QR decomposition to save further space
-    # Just removing memory of fitting process, don't need this matrix
-    mod$qr$qr <- NULL 
-    
-    return(mod)
-  }
-}
-# Applying to models
-final_glm.push <- strip_glm(final_glm)
-saveRDS(final_glm.push, file = "R/EnhancedModels/FinalGLM/EnhancedGLM")
 
-# Saving the datasets too incase I want them in the XGBoost
-saveRDS(train, file = "C:/Users/matth/Desktop/Statistical Consultancy/Semester 2/R/EnhancedModels/data/EnhancedGLMDataset/Train.rds")
-saveRDS(test, file = "C:/Users/matth/Desktop/Statistical Consultancy/Semester 2/R/EnhancedModels/data/EnhancedGLMDataset/Test.rds")
+# Tested spline on 4 df for completeness. Saving that too.
+# write.csv(final_results, file = "R/EnhancedModels/FinalGLM/spline_4_df_metrics.csv")
